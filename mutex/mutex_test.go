@@ -1,20 +1,20 @@
-package promise
+package mutex
 
 import (
 	"fmt"
 	"testing"
 )
 
-func Benchmark(b *testing.B) {
+func BenchmarkSimple(b *testing.B) {
 	var (
 		N      = 10
-		router = NewRouter(10, 10)
 		done   = make(chan struct{}, N)
+		router = NewRouter()
 
 		bench = func() {
 			for n := 0; n < b.N; n++ {
 				request := router.Get(fmt.Sprintf("%d", n))
-				<-request.Value
+				request.Nop()
 			}
 
 			done <- struct{}{}
