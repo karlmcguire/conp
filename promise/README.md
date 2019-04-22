@@ -2,8 +2,8 @@
 
 ## cpu
 
-<p align="center"><img src="cpu.svg"/></p>
+<p align="center"><img src="cpu.png"/></p>
 
 ## mem
 
-<p align="center"><img src="mem.svg"/></p>
+<p align="center"><img src="mem.png"/></p>
