@@ -1,4 +1,4 @@
-package conp
+package promise
 
 import (
 	"crypto/rand"
