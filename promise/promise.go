@@ -2,81 +2,62 @@ package promise
 
 import (
 	"crypto/rand"
-	"fmt"
 
 	"github.com/minio/highwayhash"
 )
 
-type (
-	Request struct {
-		Key   string
-		Value chan string
+type Request struct {
+	Key   string
+	Value chan interface{}
+	Fetch func() interface{}
+}
+
+type Bucket struct {
+	buff chan *Request
+	data map[uint64]interface{}
+	seed []byte
+}
+
+func New(n int) *Bucket {
+	bucket := &Bucket{
+		buff: make(chan *Request, n),
+		data: make(map[uint64]interface{}),
+		seed: make([]byte, 32, 32),
 	}
 
-	Bucket struct {
-		Id       int
-		Data     map[uint64]string
-		Requests chan *Request
-		Stop     chan struct{}
-	}
+	// highwayhash seed
+	rand.Read(bucket.seed)
 
-	Router struct {
-		Buckets []*Bucket
-		Count   int
-		Seed    []byte
-	}
-)
+	// start listening for incoming requests
+	go bucket.Start()
+
+	return bucket
+}
 
 func (b *Bucket) Start() {
 	for {
-		select {
-		case request := <-b.Requests:
-			request.Value <- fmt.Sprintf("%d", b.Id)
-		case <-b.Stop:
-			return
+		var (
+			request = <-b.buff
+			iden    = highwayhash.Sum64([]byte(request.Key), b.seed)
+		)
+
+		if value, exists := b.data[iden]; exists {
+			request.Value <- value
+		} else {
+			b.data[iden] = request.Fetch()
+			request.Value <- b.data[iden]
 		}
 	}
 }
 
-func NewRouter(count, buffer int) *Router {
-	var (
-		router = &Router{
-			Count: count,
-			Seed:  make([]byte, 32, 32),
-		}
-	)
-
-	// create 32 byte seed for highwayhash
-	rand.Read(router.Seed)
-
-	for i := 0; i < count; i++ {
-		router.Buckets = append(router.Buckets, &Bucket{
-			Id:       i,
-			Data:     make(map[uint64]string),
-			Requests: make(chan *Request, buffer),
-			Stop:     make(chan struct{}),
-		})
-
-		// start listening for requests
-		go router.Buckets[i].Start()
+func (b *Bucket) Fetch(k string, f func() interface{}) (interface{}, bool) {
+	request := &Request{
+		Key:   k,
+		Value: make(chan interface{}, 1),
+		Fetch: f,
 	}
 
-	return router
-}
+	b.buff <- request
 
-func (r *Router) Get(key string) *Request {
-	var (
-		// hash key to get uint64
-		hashed = highwayhash.Sum64([]byte(key), r.Seed)
-		// create request with promised value
-		request = &Request{
-			Key:   key,
-			Value: make(chan string, 1),
-		}
-	)
-
-	// add requests to queue
-	r.Buckets[hashed&(uint64(r.Count)-1)].Requests <- request
-
-	return request
+	return request, true
 }
